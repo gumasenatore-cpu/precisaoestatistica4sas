@@ -12,11 +12,9 @@ st.set_page_config(
 
 
 def dms_to_decimal(deg, min, sec):
-  """Converte Graus, Minutos e Segundos para Graus Decimais."""
   sign = -1 if deg < 0 or str(deg).startswith("-") else 1
   deg_abs = abs(float(deg))
-  decimal = deg_abs + float(min) / 60.0 + float(sec) / 3600.0
-  return decimal * sign
+  return (deg_abs + float(min) / 60.0 + float(sec) / 3600.0) * sign
 
 
 def nmea_to_decimal(coord_str, direction):
@@ -85,26 +83,34 @@ st.markdown(
     " metrológica para clientes."
 )
 
-st.sidebar.header("1. Coordenada do Marco (Padrão IBGE)")
-st.sidebar.markdown(
-    "Insira os dados conforme constam na monografia do marco (DMS):"
+st.sidebar.header("1. Parâmetros de Referência")
+usar_centroide = st.sidebar.checkbox(
+    "Usar centro da coleta como referência (Focar na Precisão Interna)",
+    value=True,
+    help=(
+        "Remove o viés de coordenadas do marco e mede o quão compactos os"
+        " pontos ficaram entre si."
+    ),
 )
 
-# Latitude Inputs
-st.sidebar.text("Latitude do Marco:")
-lat_deg = st.sidebar.number_input("Graus (Lat)", value=-23, format="%d")
-lat_min = st.sidebar.number_input("Minutos (Lat)", value=0, format="%d")
-lat_sec = st.sidebar.number_input("Segundos (Lat)", value=26.6039, format="%.4f")
+if not usar_centroide:
+  st.sidebar.markdown("Insira os dados do marco do IBGE (DMS):")
+  lat_deg = st.sidebar.number_input("Graus (Lat)", value=-23, format="%d")
+  lat_min = st.sidebar.number_input("Minutos (Lat)", value=0, format="%d")
+  lat_sec = st.sidebar.number_input(
+      "Segundos (Lat)", value=26.6039, format="%.4f"
+  )
 
-# Longitude Inputs (Exemplo padrão para teste se precisar, ajuste com o seu)
-st.sidebar.markdown("---")
-st.sidebar.text("Longitude do Marco:")
-lon_deg = st.sidebar.number_input("Graus (Lon)", value=-46, format="%d")
-lon_min = st.sidebar.number_input("Minutos (Lon)", value=0, format="%d")
-lon_sec = st.sidebar.number_input("Segundos (Lon)", value=0.0, format="%.4f")
-
-ref_lat = dms_to_decimal(lat_deg, lat_min, lat_sec)
-ref_lon = dms_to_decimal(lon_deg, lon_min, lon_sec)
+  lon_deg = st.sidebar.number_input("Graus (Lon)", value=-46, format="%d")
+  lon_min = st.sidebar.number_input("Minutos (Lon)", value=0, format="%d")
+  lon_sec = st.sidebar.number_input("Segundos (Lon)", value=0.0, format="%.4f")
+  ref_lat = dms_to_decimal(lat_deg, lat_min, lat_sec)
+  ref_lon = dms_to_decimal(lon_deg, lon_min, lon_sec)
+else:
+  st.sidebar.info(
+      "Modo de Precisão Interna ativado: o ponto zero (0,0) será a média da"
+      " sua própria coleta."
+  )
 
 st.sidebar.markdown("---")
 st.sidebar.header("2. Arquivo de Rastreio NMEA")
@@ -121,6 +127,10 @@ if uploaded_file is not None:
         "Não foram encontradas sentenças $GPGGA válidas no arquivo enviado."
     )
   else:
+    if usar_centroide:
+      ref_lat = df["Lat"].mean()
+      ref_lon = df["Lon"].mean()
+
     dx_list = []
     dy_list = []
     dist_list = []
@@ -138,8 +148,8 @@ if uploaded_file is not None:
     df["Error_Y_m"] = dy_list
     df["Error_Radial_m"] = dist_list
 
-    cep_50 = np.percentile(df["Error_Radial_m"], 50) * 100
-    rms_95 = np.percentile(df["Error_Radial_m"], 95) * 100
+    cep_50 = np.percentile(df["Error_Radial_m"], 50) * 100  # em cm
+    rms_95 = np.percentile(df["Error_Radial_m"], 95) * 100  # em cm
 
     st.markdown("---")
     st.subheader("📊 Indicadores de Desempenho Metrológico")
@@ -164,7 +174,7 @@ if uploaded_file is not None:
           x="Error_X_m",
           y="Error_Y_m",
           color="HDOP",
-          title="Dispersão em Relação ao Marco Zero (0,0)",
+          title="Dispersão em Relação ao Centro (0,0)",
           labels={
               "Error_X_m": "Erro Leste / X (m)",
               "Error_Y_m": "Erro Norte / Y (m)",
@@ -176,7 +186,7 @@ if uploaded_file is not None:
           y=[0],
           mode="markers",
           marker=dict(color="red", size=14, symbol="cross"),
-          name="Marco Conhecido (IBGE)",
+          name="Referência Zero",
       )
       st.plotly_chart(fig_scatter, use_container_width=True)
 
@@ -208,6 +218,6 @@ if uploaded_file is not None:
     )
 else:
   st.info(
-      "👈 Insira os dados do marco do IBGE na barra lateral e envie o arquivo"
-      " `.log`."
+      "👈 Configure as opções na barra lateral e envie o arquivo `.log` para"
+      " gerar o laudo."
   )
