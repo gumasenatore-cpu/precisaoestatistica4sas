@@ -11,6 +11,14 @@ st.set_page_config(
 )
 
 
+def dms_to_decimal(deg, min, sec):
+  """Converte Graus, Minutos e Segundos para Graus Decimais."""
+  sign = -1 if deg < 0 or str(deg).startswith("-") else 1
+  deg_abs = abs(float(deg))
+  decimal = deg_abs + float(min) / 60.0 + float(sec) / 3600.0
+  return decimal * sign
+
+
 def nmea_to_decimal(coord_str, direction):
   if not coord_str or not direction:
     return None
@@ -31,16 +39,11 @@ def nmea_to_decimal(coord_str, direction):
 
 
 def calculate_local_offsets(lat, lon, ref_lat, ref_lon):
-  """Calcula deslocamento em metros (X = Leste, Y = Norte) em relação a um marco de referência."""
   R = 6371000  # Raio médio da Terra em metros
   dlat = math.radians(lat - ref_lat)
   dlon = math.radians(lon - ref_lon)
-
-  # Distância em Y (Norte-Sul)
   dy = dlat * R
-  # Distância em X (Leste-Oeste) corrigida pelo cosseno da latitude média
   dx = dlon * R * math.cos(math.radians((lat + ref_lat) / 2))
-
   return dx, dy
 
 
@@ -82,14 +85,28 @@ st.markdown(
     " metrológica para clientes."
 )
 
-st.sidebar.header("1. Parâmetros de Referência (IBGE / Marco Conhecido)")
-ref_lat = st.sidebar.number_input(
-    "Latitude do Marco (Graus Decimais)", value=-22.9068, format="%.6f"
-)
-ref_lon = st.sidebar.number_input(
-    "Longitude do Marco (Graus Decimais)", value=-43.1729, format="%.6f"
+st.sidebar.header("1. Coordenada do Marco (Padrão IBGE)")
+st.sidebar.markdown(
+    "Insira os dados conforme constam na monografia do marco (DMS):"
 )
 
+# Latitude Inputs
+st.sidebar.text("Latitude do Marco:")
+lat_deg = st.sidebar.number_input("Graus (Lat)", value=-23, format="%d")
+lat_min = st.sidebar.number_input("Minutos (Lat)", value=0, format="%d")
+lat_sec = st.sidebar.number_input("Segundos (Lat)", value=26.6039, format="%.4f")
+
+# Longitude Inputs (Exemplo padrão para teste se precisar, ajuste com o seu)
+st.sidebar.markdown("---")
+st.sidebar.text("Longitude do Marco:")
+lon_deg = st.sidebar.number_input("Graus (Lon)", value=-46, format="%d")
+lon_min = st.sidebar.number_input("Minutos (Lon)", value=0, format="%d")
+lon_sec = st.sidebar.number_input("Segundos (Lon)", value=0.0, format="%.4f")
+
+ref_lat = dms_to_decimal(lat_deg, lat_min, lat_sec)
+ref_lon = dms_to_decimal(lon_deg, lon_min, lon_sec)
+
+st.sidebar.markdown("---")
 st.sidebar.header("2. Arquivo de Rastreio NMEA")
 uploaded_file = st.sidebar.file_uploader(
     "Envie o arquivo bruto (.log)", type=["log", "txt"]
@@ -121,9 +138,8 @@ if uploaded_file is not None:
     df["Error_Y_m"] = dy_list
     df["Error_Radial_m"] = dist_list
 
-    # Métricas Estatísticas Principais (convertidas para centímetros)
-    cep_50 = np.percentile(df["Error_Radial_m"], 50) * 100  # em cm
-    rms_95 = np.percentile(df["Error_Radial_m"], 95) * 100  # em cm
+    cep_50 = np.percentile(df["Error_Radial_m"], 50) * 100
+    rms_95 = np.percentile(df["Error_Radial_m"], 95) * 100
 
     st.markdown("---")
     st.subheader("📊 Indicadores de Desempenho Metrológico")
@@ -192,6 +208,6 @@ if uploaded_file is not None:
     )
 else:
   st.info(
-      "👈 Insira as coordenadas corretas do marco de referência e faça o upload"
-      " do arquivo `.log` na barra lateral."
+      "👈 Insira os dados do marco do IBGE na barra lateral e envie o arquivo"
+      " `.log`."
   )
